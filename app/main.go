@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -67,7 +68,20 @@ func main() {
 	if len(resp.Choices) == 0 {
 		panic("No choices in response")
 	}
-	fmt.Fprintln(os.Stderr, "Logs from your program will appear here!")
+	if resp.Choices[0].Message.ToolCalls == nil {
+		fmt.Print(resp.Choices[0].Message.Content)
+	} else {
+		toolCall := resp.Choices[0].Message.ToolCalls[0]
+		var args map[string]string
+		json.Unmarshal([]byte(toolCall.Function.Arguments), &args)
+		filePath := args["file_path"]
+		content, err := os.ReadFile(filePath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error reading file: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Print(string(content))
+	}
 
-	fmt.Print(resp.Choices[0].Message.Content)
+	fmt.Fprintln(os.Stderr, "Logs from your program will appear here!")
 }
