@@ -48,7 +48,7 @@ func main() {
 				Model:    "anthropic/claude-haiku-4.5",
 				Messages: messages,
 				Tools: []openai.ChatCompletionToolUnionParam{
-					openai.ChatCompletionFunctionTool(openai.FunctionDefinitionParam{
+					openai.ChatCompletionFunctionTool(openai.FunctionDefinitionParam{ //Read
 						Name:        "Read",
 						Description: openai.String("Read and return the contents of a file"),
 						Parameters: openai.FunctionParameters{
@@ -60,6 +60,24 @@ func main() {
 								},
 							},
 							"required": []string{"file_path"},
+						},
+					}),
+					openai.ChatCompletionFunctionTool(openai.FunctionDefinitionParam{ //Write
+						Name:        "Write",
+						Description: openai.String("Write content to a file"),
+						Parameters: openai.FunctionParameters{
+							"type": "object",
+							"properties": map[string]any{
+								"file_path": map[string]any{
+									"type":        "string",
+									"description": "The path of the file to write to",
+								},
+								"content": map[string]any{
+									"type":        "string",
+									"description": "The content to write to the file",
+								},
+							},
+							"required": []string{"file_path", "content"},
 						},
 					}),
 				},
@@ -96,19 +114,41 @@ func main() {
 			var args map[string]string
 			json.Unmarshal([]byte(toolCall.Function.Arguments), &args)
 			filePath := args["file_path"]
-			content, err := os.ReadFile(filePath)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "error reading file: %v\n", err)
-				os.Exit(1)
-			}
-			messages = append(messages, openai.ChatCompletionMessageParamUnion{
-				OfTool: &openai.ChatCompletionToolMessageParam{
-					ToolCallID: toolCall.ID,
-					Content: openai.ChatCompletionToolMessageParamContentUnion{
-						OfString: openai.String(string(content)),
+
+			switch toolCall.Function.Name {
+
+			case "Read":
+				content, err := os.ReadFile(filePath)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "error reading file: %v\n", err)
+					os.Exit(1)
+				}
+				messages = append(messages, openai.ChatCompletionMessageParamUnion{
+					OfTool: &openai.ChatCompletionToolMessageParam{
+						ToolCallID: toolCall.ID,
+						Content: openai.ChatCompletionToolMessageParamContentUnion{
+							OfString: openai.String(string(content)),
+						},
 					},
-				},
-			})
+				})
+
+			case "Write":
+				content := args["content"]
+				err := os.WriteFile(filePath, []byte(content), 0644)
+
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "error writing file:%v\n", err)
+					os.Exit(1)
+				}
+				messages = append(messages, openai.ChatCompletionMessageParamUnion{
+					OfTool: &openai.ChatCompletionToolMessageParam{
+						ToolCallID: toolCall.ID,
+						Content: openai.ChatCompletionToolMessageParamContentUnion{
+							OfString: openai.String(string(content)),
+						},
+					},
+				})
+			}
 		}
 	}
 }
